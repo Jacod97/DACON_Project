@@ -16,83 +16,50 @@
 ## 2. 수행 역할
 
 ### 사고 보고서 데이터 전처리 및 메타데이터 분류
-- ID 기반 규칙을 활용해 `공종`, `사고객체`, `작업프로세스` 등의 결측값을 도메인 지식으로 보정
-- `공사종류`, `공종`, `사고객체` 컬럼을 `대분류 / 중분류` 체계로 분할해 정형화
-- LLM 및 벡터 검색에서 활용 가능한 형태로 사고 정보를 구조화
+- 사고 보고서 파일명을 기반으로 공사유형, 작업유형, 사고유형, 사고객체를 자동 분류할 수 있는 메타데이터 사전 구성
+- 질문 내 포함된 키워드에 따라 동적으로 필터링 조건을 생성해 검색 성능을 높임
 
 ```python
-train["공종(대분류)"] = train["공종"].str.split(" > ").str[0]
-train["사고객체(중분류)"] = train["사고객체"].str.split(" > ").str[1]
-for record_id in train[train["사고객체"].isnull()]["ID"]:
-    train.loc[train["ID"] == record_id, "사고객체"] = accident_object_fill_values.get(record_id, "기타 > 기타")
+metadata = extract_metadata_from_filename(doc["filename"])
+filters = get_dynamic_filters(question)
 ```
-### 사고 유형에 따른 동적 필터링 기반 RAG 검색 시스템 구축
-- 사고 정보(공종, 사고객체 등)에 따라 검색 쿼리를 동적으로 구성
-- LangChain을 기반으로 사고 유형에 맞는 유사 문장을 벡터 검색
-- 검색된 대응 문장을 직접 반환하거나 LLM 응답 생성의 context로 활용
+
+### RAG 기반 검색 시스템 구축
+- LangChain 벡터 검색 시스템 위에 메타데이터 필터링을 추가해 유사 사례의 정밀도를 향상시킴
+- 질문별 사고 맥락에 맞는 사례만 걸러내어 문맥 신뢰도 확보
 
 ```python
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
-
-embedding_model = HuggingFaceEmbeddings(model_name="jhgan/ko-sbert-nli")
-db = FAISS.load_local("vector_db_path", embedding_model)
-retriever = db.as_retriever(search_kwargs={"k": 5})
-retrieved_docs = retriever.invoke("철근콘크리트공사 / 덤프트럭 / 운반작업 / 철근 낙하")
+results = vectorstore.similarity_search_with_score(query, k=5)
+filtered = [doc for doc, score in results if doc.metadata["work_type"] == "구조공사"]
 ```
-### FAISS를 사용한 벡터 스토어 구축
-- 사고 설명 및 대응 문장을 임베딩 후 FAISS로 색인
-- `Top-K` 유사 문장을 고속 검색하여 실시간 대응 문장 후보로 활용
-- 벡터 기반 유사도 정렬로 유사 사고 탐색 정확도 향상
+
+### FAISS 벡터 스토어 구축 및 GPU 임베딩 처리
+- `jhgan/ko-sbert-sts` 모델을 활용해 문서를 임베딩하고 FAISS로 저장
+- 배치 기반 인코딩과 GPU 연산을 통해 수천 개 문서도 빠르게 처리 가능
 
 ```python
-from langchain.vectorstores import FAISS
-from langchain.document_loaders import TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-loader = TextLoader("data/accident_cases.txt", encoding="utf-8")
-docs = loader.load()
-splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
-docs_split = splitter.split_documents(docs)
-
-db = FAISS.from_documents(docs_split, embedding_model)
-db.save_local("vector_db_path")
+model = SentenceTransformer("jhgan/ko-sbert-sts").to(device)
+embeddings = model.encode(batch, device=device)
 ```
 
-### Ollama 기반 Gemma3:27b 모델을 활용한 대응책 생성
-- 검색된 유사 사례 및 사고 설명을 프롬프트에 포함하여 대응 문장 생성
-- 로컬 실행 가능한 Gemma3:27b 모델을 Ollama를 통해 호출
-- 사고 맥락이 반영된 대응책 생성으로 현장 적용성을 강화
+### Ollama 기반 Gemma3 모델을 활용한 대응책 생성
+- 사고 질문에 대해 유사 사례를 context로 구성한 후, Gemma3 모델을 통해 간결한 대응 문장을 생성
+- 최대 100토큰 제한, 형식 통일, 불필요한 수식어 제거 등 평가 기준에 맞춘 응답 형식 제어
 
 ```python
-import ollama
-
-prompt = f"""
-### 사고 상황:
-- 공종: 철근콘크리트공사
-- 사고객체: 덤프트럭
-- 작업프로세스: 운반작업
-- 사고원인: 철근 낙하
-
-### 대응 방안 작성:
-"""
-
-response = ollama.chat(model="gemma:3b", messages=[{"role": "user", "content": prompt}])
-print(response["message"]["content"])
+llm = ChatOllama(model='gemma3:27b', temperature=0.0)
+result = llm.invoke({"context": context, "question": question})
 ```
 
-### GPU 가속화 및 대규모 배치 임베딩 처리
-- CUDA를 활용한 SentenceTransformer 임베딩 처리 가속
-- `tqdm`, 배치 처리 등을 활용해 수천 건 이상의 사고 문장을 효율적으로 벡터화
-- OOM 방지를 위한 메모리 최적화 흐름 구성
+### 최종 결과 저장 및 제출 파일 생성
+- LLM 결과와 벡터 임베딩을 포함한 결과를 DACON 포맷(`submission.csv`)에 맞게 저장
+- 토치 캐시 정리 및 결과 재현성을 위한 타임스탬프 기반 파일 관리
 
 ```python
-from sentence_transformers import SentenceTransformer
-from tqdm import tqdm
-
-model = SentenceTransformer("jhgan/ko-sbert-nli", device="cuda")
-embeddings = [model.encode(text) for text in tqdm(data["사고원인"].tolist())]
+submission.iloc[:, 1] = test_results
+submission.to_csv(f"{timestamp}_submission.csv", index=False)
 ```
+
 ---
 
 ## 3. 이슈발생 및 해결과정
