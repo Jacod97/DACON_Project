@@ -1,5 +1,9 @@
 # 건설공사 사고 예방 및 대응책 생성 : 한솔데코 시즌3 생성 AI 경진대회(2025.02 ~ 2025.03)
-
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-000000?style=flat-square)
+![FAISS](https://img.shields.io/badge/FAISS-228B22?style=flat-square)
+![SentenceTransformer](https://img.shields.io/badge/SentenceTransformer-006699?style=flat-square)
 ---
 
 ## 1. 프로젝트 소개
@@ -15,15 +19,7 @@
 - ID 기반 규칙을 활용해 `공종`, `사고객체`, `작업프로세스` 등의 결측값을 도메인 지식으로 보정
 - `공사종류`, `공종`, `사고객체` 컬럼을 `대분류 / 중분류` 체계로 분할해 정형화
 - LLM 및 벡터 검색에서 활용 가능한 형태로 사고 정보를 구조화
----
 
-## 📈 프로젝트 주요 기능
-
-- **데이터 전처리**: 사고 상황 데이터 정제 및 메타데이터 분류
-- **RAG 검색 시스템**: 유사 사고 사례 검색 및 문맥 생성
-- **LLM 답변 생성**: Gemma3:27b 모델을 이용한 대응 문구 생성
-- **GPU 가속 처리**: RAG 배치 처리 및 임베딩 배치 최적화
-- **결과 제출 파일 생성**: 대응 문구 및 임베딩 결과를 CSV로 저장
 ```python
 train["공종(대분류)"] = train["공종"].str.split(" > ").str[0]
 train["사고객체(중분류)"] = train["사고객체"].str.split(" > ").str[1]
@@ -99,36 +95,14 @@ embeddings = [model.encode(text) for text in tqdm(data["사고원인"].tolist())
 ```
 ---
 
-## 🛠️ 프로젝트 기술 스택
+## 3. 이슈발생 및 해결과정
 
-Language : 🐍 Python  
-Library : 🔗 LangChain | 🧠 SentenceTransformer | 🛠️ FAISS  
-Tool : 🐙 GitHub
+
 
 ---
 
-## 🖥️ 시스템 아키텍처 요약
-
-- PDF 텍스트 파일 로드 및 메타데이터 자동 분류
-- ko-sbert-sts 기반 텍스트 임베딩 및 FAISS 벡터스토어 구축
-- LangChain을 통한 RAG 검색 및 유사 문맥 추출
-- Ollama Gemma3:27b 모델을 사용하여 간결한 대응 문구 생성
-- 최종 결과를 CSV 파일로 저장
+## 4. 대회 수상팀 코드 분석
 
 ---
 
-## 📊 프로젝트 결과 및 회고
-
-### 결과
-- 주어진 사고 상황에 대해 대응책을 생성하는 시스템을 성공적으로 구축했으나, 최종 대회 평가에서는 **자카르 유사도 약 0.49**의 성능을 기록하여 **본선 진출에 실패**했습니다.
-
-### 회고
-- **데이터 전처리** 과정에서, 특히 **결측치 처리** 및 **유효 데이터 선별** 부분이 미흡하여 모델 입력 품질에 영향을 주었음을 인지했습니다.
-- **프롬프트 엔지니어링**을 보다 정교하게 다듬거나,  
-- **LLM(언어 모델)을 직접 파인튜닝**할 수 있었다면, 더욱 일관성 있고 우수한 대응 문구를 생성할 수 있었을 것으로 판단됩니다.
-- 또한, **임베딩 품질 개선**이나 **벡터 검색 최적화**를 통해 검색 정확도를 높였어야 했던 점이 아쉬움으로 남습니다.
-
-### 향후 개선 방향
-- 사고 상황별 특성에 맞는 **도메인 특화 프롬프트** 설계
-- **사전 학습된 LLM 파인튜닝**을 통한 생성 품질 향상
-- **전처리 강화** 및 **텍스트 데이터 품질 향상**을 통한 시스템 전반적 성능 개선
+## 5. 프로젝트 회고
